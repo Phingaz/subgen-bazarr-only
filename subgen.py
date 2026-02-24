@@ -127,6 +127,11 @@ class MultiplePatternsFilter(logging.Filter):
             'timescale not set',
             'misdetection possible',
             'srt was added',
+            'Calling on_part_data',
+            'Calling on_part_end',
+            'Calling on_headers_finished',
+            'Calling on_end',
+            'Calling on_',
         ]
         return not any(pattern in record.getMessage() for pattern in patterns)
 
@@ -145,6 +150,9 @@ for handler in logger.handlers:
     handler.addFilter(MultiplePatternsFilter())
 
 logging.getLogger('multipart').setLevel(logging.WARNING)
+logging.getLogger('multipart.multipart').setLevel(logging.WARNING)
+logging.getLogger('python_multipart').setLevel(logging.WARNING)
+logging.getLogger('python_multipart.multipart').setLevel(logging.WARNING)
 logging.getLogger('urllib3').setLevel(logging.WARNING)
 logging.getLogger('watchfiles').setLevel(logging.WARNING)
 logging.getLogger('asyncio').setLevel(logging.WARNING)
