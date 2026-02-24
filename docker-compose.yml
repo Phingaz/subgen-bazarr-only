@@ -1,0 +1,72 @@
+services:
+   bazarr:
+      container_name: bazarr
+      image: "lscr.io/linuxserver/bazarr:latest"
+      environment:
+         - PUID=1000
+         - PGID=1000
+         - TZ=America/Sao_Paulo
+         - SERVICE_URL_BAZARR_6767
+      volumes:
+         - "/configs/bazarr:/config"
+         - "/mnt/Server/downloads:/downloads"
+         - "/mnt/Vol1/movies:/movies"
+         - "/mnt/Vol1/animes:/animes"
+         - "/mnt/Vol2:/series"
+      healthcheck:
+         test:
+            - CMD
+            - wget
+            - "-q"
+            - "--spider"
+            - "http://127.0.0.1:6767"
+         interval: 30s
+         timeout: 5s
+         retries: 3
+      labels:
+         - traefik.http.middlewares.authentik@file
+      depends_on:
+         subgen:
+            condition: service_healthy
+
+   subgen:
+      container_name: subgen
+      tty: true
+      build:
+         context: .
+         dockerfile: Dockerfile
+      image: subgen-local:latest
+      environment:
+         - WHISPER_MODEL=medium
+         - WHISPER_THREADS=8
+         - WEBHOOK_PORT=9000
+         - CONCURRENT_TRANSCRIPTIONS=2
+         - WORD_LEVEL_HIGHLIGHT=False
+         - DEBUG=True
+         - TRANSCRIBE_DEVICE=cuda
+         - CLEAR_VRAM_ON_COMPLETE=True
+         - MODEL_PATH=/subgen/models
+         - MODEL_CLEANUP_DELAY=30
+         - UPDATE=False
+         - APPEND=False
+         - ASR_TIMEOUT=18000
+         - CUSTOM_REGROUP=cm_sl=84_sl=42++++++1
+      ports:
+         - "9000:9000"
+      deploy:
+         resources:
+            reservations:
+               devices:
+                  - driver: nvidia
+                    count: all
+                    capabilities:
+                       - gpu
+      healthcheck:
+         test:
+            - CMD
+            - curl
+            - "-f"
+            - "http://127.0.0.1:9000/status"
+         interval: 30s
+         timeout: 5s
+         retries: 3

@@ -1,0 +1,7 @@
+numpy
+stable-ts-whisperless
+fastapi
+faster-whisper
+uvicorn
+python-multipart
+ffmpeg-python
