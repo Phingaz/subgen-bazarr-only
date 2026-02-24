@@ -80,6 +80,10 @@ detect_language_offset = int(os.getenv('DETECT_LANGUAGE_OFFSET', 0))
 model_cleanup_delay = int(os.getenv('MODEL_CLEANUP_DELAY', 30))
 asr_timeout = int(os.getenv('ASR_TIMEOUT', 18000))
 force_detected_language_to = LanguageCode.from_string(os.getenv('FORCE_DETECTED_LANGUAGE_TO', ''))
+cuda_fallback_compute_types = [
+    value.strip() for value in os.getenv('CUDA_FALLBACK_COMPUTE_TYPES', 'float32|int8').split('|') if value.strip()
+]
+cuda_fallback_to_cpu = convert_to_bool(os.getenv('CUDA_FALLBACK_TO_CPU', True))
 
 try:
     kwargs = ast.literal_eval(os.getenv('SUBGEN_KWARGS', '{}') or '{}')
@@ -96,6 +100,8 @@ model = None
 model_cleanup_timer = None
 model_cleanup_lock = Lock()
 model_init_lock = Lock()
+active_device = transcribe_device
+active_compute_type = compute_type
 
 in_docker = os.path.exists('/.dockerenv')
 docker_status = 'Docker' if in_docker else 'Standalone'
@@ -342,6 +348,73 @@ def render_asr_output(result, output: str, word_timestamps: bool) -> str:
     return result.to_srt_vtt(filepath=None, word_level=word_timestamps)
 
 
+def get_active_runtime_config() -> tuple[str, str]:
+    with model_init_lock:
+        return active_device, active_compute_type
+
+
+def unload_model_locked() -> None:
+    global model
+    if model is None:
+        return
+
+    try:
+        model.model.unload_model()
+    except Exception as e:
+        logging.warning(f'Could not unload model cleanly before runtime switch: {e}')
+    model = None
+
+
+def is_cuda_cublas_not_supported_error(error: Exception) -> bool:
+    return 'CUBLAS_STATUS_NOT_SUPPORTED' in str(error)
+
+
+def maybe_switch_runtime_after_error(task_id: str, used_device: str, used_compute_type: str, error: Exception) -> bool:
+    """
+    Handle CUDA backend incompatibility by switching runtime configuration.
+    Returns True when caller should retry inference.
+    """
+    global active_device, active_compute_type
+
+    if used_device != 'cuda' or not is_cuda_cublas_not_supported_error(error):
+        return False
+
+    with model_init_lock:
+        # Another worker may have already switched backend after this task started.
+        if active_device != used_device or active_compute_type != used_compute_type:
+            logging.warning(
+                f'ASR runtime already switched by another worker '
+                f'({used_device}/{used_compute_type} -> {active_device}/{active_compute_type}); retrying task {task_id}'
+            )
+            return True
+
+        next_compute_type = next(
+            (value for value in cuda_fallback_compute_types if value != used_compute_type),
+            None,
+        )
+        if next_compute_type:
+            unload_model_locked()
+            active_device = 'cuda'
+            active_compute_type = next_compute_type
+            logging.warning(
+                f'CUDA backend failed for task {task_id} with compute_type={used_compute_type}; '
+                f'retrying with compute_type={next_compute_type}'
+            )
+            return True
+
+        if cuda_fallback_to_cpu:
+            unload_model_locked()
+            active_device = 'cpu'
+            active_compute_type = 'float32'
+            logging.warning(
+                f'CUDA backend failed for task {task_id} and no CUDA fallback type remained; '
+                f'retrying on CPU float32'
+            )
+            return True
+
+    return False
+
+
 # ==========================================================================
 # QUEUE + WORKERS
 # ==========================================================================
@@ -399,8 +472,6 @@ def asr_task_worker(task_data: dict) -> None:
     result_container = task_data.get('result_container')
 
     try:
-        start_model()
-
         task = task_data['task']
         language = task_data['language']
         video_file = task_data.get('video_file')
@@ -424,7 +495,25 @@ def asr_task_worker(task_data: dict) -> None:
 
         args.update(kwargs)
 
-        result = model.transcribe(task=task, language=language, **args, verbose=None)
+        max_attempts = 1 + len(cuda_fallback_compute_types) + (1 if cuda_fallback_to_cpu else 0)
+        attempt = 0
+        while True:
+            attempt += 1
+            used_device, used_compute_type = get_active_runtime_config()
+            start_model()
+            try:
+                result = model.transcribe(task=task, language=language, **args, verbose=None)
+                break
+            except RuntimeError as e:
+                if attempt < max_attempts and maybe_switch_runtime_after_error(
+                    task_id,
+                    used_device,
+                    used_compute_type,
+                    e,
+                ):
+                    continue
+                raise
+
         append_line(result)
 
         if result_container:
@@ -442,8 +531,6 @@ def detect_language_from_upload(task_data: dict) -> None:
     result_container = task_data.get('result_container')
 
     try:
-        start_model()
-
         video_file = task_data.get('video_file')
         file_content = task_data['audio_content']
         encode = task_data['encode']
@@ -469,7 +556,26 @@ def detect_language_from_upload(task_data: dict) -> None:
             args['input_sr'] = 16000
 
         args.update(kwargs)
-        detected_language = LanguageCode.from_name(model.transcribe(**args, verbose=None).language)
+
+        max_attempts = 1 + len(cuda_fallback_compute_types) + (1 if cuda_fallback_to_cpu else 0)
+        attempt = 0
+        while True:
+            attempt += 1
+            used_device, used_compute_type = get_active_runtime_config()
+            start_model()
+            try:
+                detected_language = LanguageCode.from_name(model.transcribe(**args, verbose=None).language)
+                break
+            except RuntimeError as e:
+                if attempt < max_attempts and maybe_switch_runtime_after_error(
+                    task_id,
+                    used_device,
+                    used_compute_type,
+                    e,
+                ):
+                    continue
+                raise
+
         payload = {
             'detected_language': detected_language.to_name(),
             'language_code': detected_language.to_iso_639_1(),
@@ -545,14 +651,16 @@ def start_model():
 
     with model_init_lock:
         if model is None:
-            logging.debug('Model was purged, loading model')
+            logging.debug(
+                f'Model was purged, loading model with device={active_device}, compute_type={active_compute_type}'
+            )
             model = stable_whisper.load_faster_whisper(
                 whisper_model,
                 download_root=model_location,
-                device=transcribe_device,
+                device=active_device,
                 cpu_threads=whisper_threads,
                 num_workers=concurrent_transcriptions,
-                compute_type=compute_type,
+                compute_type=active_compute_type,
             )
 
 
@@ -582,7 +690,7 @@ def perform_model_cleanup():
                 except Exception as e:
                     logging.error(f'Error unloading model: {e}')
 
-            if transcribe_device == 'cuda' and torch.cuda.is_available():
+            if active_device == 'cuda' and torch.cuda.is_available():
                 try:
                     torch.cuda.empty_cache()
                 except Exception as e:
@@ -801,7 +909,12 @@ if __name__ == '__main__':
 
     logging.info(f'Subgen v{subgen_version}')
     logging.info(f'Threads: {whisper_threads}, Concurrent transcriptions: {concurrent_transcriptions}')
-    logging.info(f'Transcribe device: {transcribe_device}, Model: {whisper_model}')
+    logging.info(
+        f'Transcribe device: {transcribe_device}, Model: {whisper_model}, Compute type: {compute_type}'
+    )
+    logging.info(
+        f'CUDA fallback compute types: {cuda_fallback_compute_types}, CPU fallback: {cuda_fallback_to_cpu}'
+    )
 
     os.environ['KMP_DUPLICATE_LIB_OK'] = 'TRUE'
     uvicorn.run(

@@ -44,6 +44,9 @@ services:
          - WORD_LEVEL_HIGHLIGHT=False
          - DEBUG=True
          - TRANSCRIBE_DEVICE=cuda
+         - COMPUTE_TYPE=float16
+         - CUDA_FALLBACK_COMPUTE_TYPES=float16|float32|int8
+         - CUDA_FALLBACK_TO_CPU=True
          - CLEAR_VRAM_ON_COMPLETE=True
          - MODEL_PATH=/subgen/models
          - MODEL_CLEANUP_DELAY=30
