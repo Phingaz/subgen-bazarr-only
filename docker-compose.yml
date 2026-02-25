@@ -38,9 +38,9 @@ services:
       image: subgen-local:latest
       environment:
          - WHISPER_MODEL=medium
-         - WHISPER_THREADS=8
+         - WHISPER_THREADS=4
          - WEBHOOK_PORT=9000
-         - CONCURRENT_TRANSCRIPTIONS=1
+         - CONCURRENT_TRANSCRIPTIONS=2
          - WORD_LEVEL_HIGHLIGHT=False
          - DEBUG=True
          - TRANSCRIBE_DEVICE=cuda
