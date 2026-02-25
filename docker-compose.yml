@@ -40,7 +40,7 @@ services:
          - WHISPER_MODEL=medium
          - WHISPER_THREADS=8
          - WEBHOOK_PORT=9000
-         - CONCURRENT_TRANSCRIPTIONS=2
+         - CONCURRENT_TRANSCRIPTIONS=1
          - WORD_LEVEL_HIGHLIGHT=False
          - DEBUG=True
          - TRANSCRIBE_DEVICE=cuda
