@@ -37,23 +37,23 @@ services:
          dockerfile: Dockerfile
       image: subgen-local:latest
       environment:
-         - WHISPER_MODEL=large-v3-turbo
-         - WHISPER_THREADS=8
-         - WEBHOOK_PORT=9000
-         - CONCURRENT_TRANSCRIPTIONS=1
-         - WORD_LEVEL_HIGHLIGHT=False
-         - DEBUG=False
-         - TRANSCRIBE_DEVICE=cuda
-         - COMPUTE_TYPE=float16
-         - CUDA_FALLBACK_COMPUTE_TYPES=float16|float32|int8
-         - CUDA_FALLBACK_TO_CPU=True
-         - CLEAR_VRAM_ON_COMPLETE=TRUE
-         - MODEL_PATH=/subgen/models
-         - MODEL_CLEANUP_DELAY=100
-         - UPDATE=False
-         - APPEND=False
-         - ASR_TIMEOUT=18000
-         - CUSTOM_REGROUP=default
+         - WHISPER_MODEL=${WHISPER_MODEL:-large-v3-turbo}
+         - WHISPER_THREADS=${WHISPER_THREADS:-8}
+         - WEBHOOK_PORT=${WEBHOOK_PORT:-9000}
+         - CONCURRENT_TRANSCRIPTIONS=${CONCURRENT_TRANSCRIPTIONS:-1}
+         - WORD_LEVEL_HIGHLIGHT=${WORD_LEVEL_HIGHLIGHT:-False}
+         - 'DEBUG=${DEBUG:-True}'
+         - TRANSCRIBE_DEVICE=${TRANSCRIBE_DEVICE:-cuda}
+         - COMPUTE_TYPE=${COMPUTE_TYPE:-float16}
+         - CUDA_FALLBACK_COMPUTE_TYPES=${CUDA_FALLBACK_COMPUTE_TYPES:-float16|float32|int8}
+         - CUDA_FALLBACK_TO_CPU=${CUDA_FALLBACK_TO_CPU:-True}
+         - CLEAR_VRAM_ON_COMPLETE=${CLEAR_VRAM_ON_COMPLETE:-True}
+         - MODEL_PATH=${MODEL_PATH:-/subgen/models}
+         - MODEL_CLEANUP_DELAY=${MODEL_CLEANUP_DELAY:-100}
+         - UPDATE=${UPDATE:-False}
+         - APPEND=${APPEND:-False}
+         - ASR_TIMEOUT=${ASR_TIMEOUT:-18000}
+         - CUSTOM_REGROUP=${CUSTOM_REGROUP:-default}
          - "SUBGEN_KWARGS={'beam_size': 2, 'best_of': 2, 'temperature': 0, 'condition_on_previous_text': False}"
       ports:
          - "9000:9000"
