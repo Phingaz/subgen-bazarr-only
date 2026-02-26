@@ -37,23 +37,24 @@ services:
          dockerfile: Dockerfile
       image: subgen-local:latest
       environment:
-         - WHISPER_MODEL=medium
-         - WHISPER_THREADS=4
+         - WHISPER_MODEL=large-v3-turbo
+         - WHISPER_THREADS=8
          - WEBHOOK_PORT=9000
-         - CONCURRENT_TRANSCRIPTIONS=2
+         - CONCURRENT_TRANSCRIPTIONS=1
          - WORD_LEVEL_HIGHLIGHT=False
-         - DEBUG=True
+         - DEBUG=False
          - TRANSCRIBE_DEVICE=cuda
          - COMPUTE_TYPE=float16
          - CUDA_FALLBACK_COMPUTE_TYPES=float16|float32|int8
          - CUDA_FALLBACK_TO_CPU=True
-         - CLEAR_VRAM_ON_COMPLETE=True
+         - CLEAR_VRAM_ON_COMPLETE=TRUE
          - MODEL_PATH=/subgen/models
-         - MODEL_CLEANUP_DELAY=30
+         - MODEL_CLEANUP_DELAY=100
          - UPDATE=False
          - APPEND=False
          - ASR_TIMEOUT=18000
-         - CUSTOM_REGROUP=cm_sl=84_sl=42++++++1
+         - CUSTOM_REGROUP=default
+         - "SUBGEN_KWARGS={'beam_size': 2, 'best_of': 2, 'temperature': 0, 'condition_on_previous_text': False}"
       ports:
          - "9000:9000"
       deploy:

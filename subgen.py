@@ -249,7 +249,7 @@ class ProgressHandler:
         self.interval = 5
 
     def __call__(self, seek, total):
-        if docker_status != 'Docker' and not debug:
+        if not debug:
             return
 
         current_time = time.time()
