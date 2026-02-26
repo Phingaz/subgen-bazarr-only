@@ -50,7 +50,6 @@ def prompt_and_save_bazarr_env_variables():
         'APPEND': ('Append', 'Append \'Transcribed by whisper\' to generated subtitle (true/false)', 'False'),
     }
 
-    user_input = {}
     with open('subgen.env', 'w') as file:
         for var, (description, prompt, default) in env_vars.items():
             value = input(f"{prompt} [{default}]: ") or default
@@ -95,24 +94,21 @@ def main():
     parser.add_argument('-u', '--update', action='store_true', help="Update Subgen")
     parser.add_argument('-x', '--exit-early', action='store_true', help="Exit without running subgen.py")
     parser.add_argument('-s', '--setup-bazarr', action='store_true', help="Prompt for common Bazarr setup parameters and save them for future runs")
-    parser.add_argument('-b', '--branch', type=str, default='main', help='Specify the branch to download from')
     parser.add_argument('-l', '--launcher-update', action='store_true', help="Update launcher.py and re-launch")
 
     args = parser.parse_args()
 
-    branch_name = args.branch if args.branch != 'main' else os.getenv('BRANCH', 'main')
-    script_name_suffix = f"-{branch_name}.py" if branch_name != "main" else ".py"
-    subgen_script_to_run = f"subgen{script_name_suffix}"
-    language_code_script_to_download = f"language_code{script_name_suffix}"
+    subgen_script_to_run = "subgen.py"
+    language_code_script_to_download = "language_code.py"
 
 
     if args.launcher_update or convert_to_bool(os.getenv('LAUNCHER_UPDATE')):
-        print(f"Updating launcher.py from GitHub branch {branch_name}...")
-        download_from_github(f"https://raw.githubusercontent.com/McCloudS/subgen/{branch_name}/launcher.py", f'launcher{script_name_suffix}')
+        print(f"Updating launcher.py from GitHub branch main...")
+        download_from_github(f"https://raw.githubusercontent.com/Phingaz/subgen-bazarr-only/main/launcher.py", "launcher.py")
         excluded_args = ['--launcher-update', '-l']
         new_args = [arg for arg in sys.argv[1:] if arg not in excluded_args]
-        print(f"Relaunching updated launcher: launcher{script_name_suffix}")
-        os.execl(sys.executable, sys.executable, f"launcher{script_name_suffix}", *new_args)
+        print(f"Relaunching updated launcher: launcher.py")
+        os.execl(sys.executable, sys.executable, "launcher.py", *new_args)
         # The script will not continue past os.execl
 
     # --- Environment Variable Handling ---
@@ -148,7 +144,7 @@ def main():
     # --- End Environment Variable Handling ---
 
 
-    requirements_url = "https://raw.githubusercontent.com/McCloudS/subgen/main/requirements.txt"
+    requirements_url = "https://raw.githubusercontent.com/Phingaz/subgen-bazarr-only/main/requirements.txt"
     requirements_file = "requirements.txt"
 
     if args.install:
@@ -156,10 +152,10 @@ def main():
         install_packages_from_requirements(requirements_file)
 
     if not os.path.exists(subgen_script_to_run) or args.update or convert_to_bool(os.getenv('UPDATE')):
-        print(f"Downloading {subgen_script_to_run} from GitHub branch {branch_name}...")
-        download_from_github(f"https://raw.githubusercontent.com/McCloudS/subgen/{branch_name}/subgen.py", subgen_script_to_run)
-        print(f"Downloading {language_code_script_to_download} from GitHub branch {branch_name}...")
-        download_from_github(f"https://raw.githubusercontent.com/McCloudS/subgen/{branch_name}/language_code.py", language_code_script_to_download)
+        print(f"Downloading {subgen_script_to_run} from GitHub branch main...")
+        download_from_github(f"https://raw.githubusercontent.com/Phingaz/subgen-bazarr-only/main/subgen.py", subgen_script_to_run)
+        print(f"Downloading {language_code_script_to_download} from GitHub branch main...")
+        download_from_github(f"https://raw.githubusercontent.com/Phingaz/subgen-bazarr-only/main/language_code.py", language_code_script_to_download)
 
     else:
         print(f"{subgen_script_to_run} exists and UPDATE is set to False, skipping download.")
